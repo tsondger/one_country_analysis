@@ -1,0 +1,377 @@
+---
+title: "EDA"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(warning = F,
+                      message = F,
+                      echo = F)
+
+library(ggplot2)
+library(reader)
+library(ggthemes)
+library(knitr)
+library(rmarkdown)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(stringr)
+library(shiny)
+library(shinydashboard)
+library(dashboardthemes)
+library(shinyWidgets)
+library(forcats)
+library(readr)
+library(readxl)
+library(tibble)
+library(kableExtra)
+library(gt)
+
+```
+
+## Info About Files
+
+```{r}
+
+file_list <- list.files("Data")
+
+file_data <- tibble()
+
+for(i in file_list){
+  
+  curr_file <- read_csv(file = paste0("Data\\", i))
+  
+  curr_file_data <- tibble(
+    file_nm = i,
+    col_nms = colnames(curr_file)
+  )
+  
+  file_data <- bind_rows(file_data, curr_file_data)
+  
+}
+
+# bold_v1 <- read_csv(file = "Data\\Boldv1.csv")
+# 
+# big_comm <- read_csv(file = "Data\\BigcommerceOrders.csv")
+# 
+# xx <- big_comm %>% distinct(`Product Details`) %>% as_tibble()
+
+```
+
+## Gather Transaction Data
+
+```{r}
+
+## Append all sources together with just the relevant columns - date of event, cancel (if applicable), product, amounts(s) - preferably the order total amount
+
+# Boldv2.csv GiveOrders.csv MiniBC.csv ShopifyOrders.csv
+
+# Keep the canceled dates for now - but figure out bold v2
+
+# Notes/Questions #
+
+  # Bold2 - No product details
+  # Cancellation dates - most platforms don't have it - some have inactive, same? Where might I find it or just infer?
+  # Is there a possibility that a single transaction can appear in multiple platforms?
+  # Later - do some research on the canceled dates - be sure to surface questions about data ^^
+
+# We also need the item price - as it isn't always in the product name
+
+big_comm <- read_csv(file = "Data\\BigcommerceOrders.csv") %>% 
+# tt <- big_comm %>%
+  rename_all(~ tolower(x = .)) %>%
+  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
+  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
+  rename_all(~ gsub(pattern = "(", replacement = "", x = ., fixed = T)) %>% 
+  rename_all(~ gsub(pattern = ")", replacement = "", x = ., fixed = T)) %>% 
+  mutate(order_date_mdy = mdy(order_date),
+         order_date_dmy = dmy(order_date),
+         order_date = if_else(condition = !is.na(order_date_mdy),
+                              true = order_date_mdy,
+                              false = order_date_dmy),
+         order_id = as.character(order_id)) %>% 
+  select(order_id, customer_email, order_date, order_total_inc_tax, product_details) %>% 
+  rename(order_total = "order_total_inc_tax") %>% 
+  mutate(file_source = "BigcommerceOrders.csv") %>% 
+  rowwise() %>% 
+  # Figure out why I'm not picking all these up
+  mutate(product_price = as.double(str_remove_all(string = str_split(string = str_split(string = product_details, 
+                                                                                        pattern = ",")[[1]][length(str_split(string = product_details, 
+                                                                                                                             pattern = ",")[[1]])], 
+                                                                     pattern = ":", n = 2)[[1]][2], 
+                                                  pattern = "[:space:]"))) %>% 
+  ungroup()
+
+bold_v1 <- read_csv(file = "Data\\Boldv1.csv") %>% 
+# tt <- bold_v1 %>% 
+  rename_all(~ tolower(x = .)) %>%
+  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
+  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
+  select(subscription_id, customer_e_mail, 
+         inactive_date,  # Make sure this is the same as cancellation 
+         subscription_date, products, total_value_of_all_products_shipped) %>% 
+  mutate(subscription_date = mdy(subscription_date),
+         inactive_date = mdy(inactive_date)) %>% 
+  rename(order_date = "subscription_date",
+         customer_email = "customer_e_mail",
+         order_total = "total_value_of_all_products_shipped",
+         product_details = "products",
+         canceled_date = "inactive_date",
+         order_id = "subscription_id") %>% 
+  mutate(order_id = as.character(order_id),
+         file_source = "Boldv1.csv") %>% 
+  rowwise() %>% 
+  mutate(product_price = 
+           as.double(str_remove_all(string = str_split(string = 
+                                                         str_split(string = product_details, pattern = "-")[[1]][length(str_split(string = product_details,
+                                                                                                                                  pattern = "-")[[1]])], 
+                                                       pattern = "x")[[1]][1], pattern = "[:space:]"))) %>% 
+  ungroup()
+
+## COME BACK - need to know if v2 of Bold has the product subscribed to
+
+# bold_v2 <- read_csv(file = "Data\\Boldv2.csv") %>%   # Maybe skip this for now since it's missing the product??
+# tt <- bold_v2 %>%
+#   rename_all(~ tolower(x = .)) %>%
+#   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
+#   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
+#   rename_all(~ gsub(pattern = "/", replacement = "_", x = ., fixed = T)) %>% 
+#   select(customer_email, created_at, 
+#          # canceled_at,  # Maybe need - think about it
+#          # products,  # Not finding this
+#          total_value_charged)
+
+give_orders <- read_csv(file = "Data\\GiveOrders.csv") %>% 
+# tt <- give_orders %>%
+  rename_all(~ tolower(x = .)) %>%
+  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
+  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
+  select(id, email, created_at, 
+         # cancelled_at,  # May need? - Not populated
+         lineitem_name, total, lineitem_price) %>% 
+  mutate(created_at = date(mdy_hm(created_at)),
+         id = format(id, scientific = F)) %>% 
+  rename(customer_email = "email",
+         order_date = "created_at",
+         # canceled_date = "cancelled_at",  # See note above
+         product_details = "lineitem_name",
+         order_total = "total",
+         order_id = "id",
+         product_price = "lineitem_price") %>% 
+  mutate(order_id = as.character(order_id),
+         file_source = "GiveOrders.csv") %>% 
+  filter(!is.na(product_price))  # Looks like there's about 17 rows - and those 17 seem completely screwed up 
+
+mini_bc <- read_csv(file = "Data\\MiniBC.csv") %>% 
+# tt <- mini_bc %>%
+  rename_all(~ tolower(x = .)) %>%
+  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
+  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
+  rename_all(~ gsub(pattern = "/", replacement = "_", x = ., fixed = T)) %>% 
+  select(email_address, signup_date, product_name, charge_total, product_price) %>% 
+  mutate(signup_date = date(mdy_hm(signup_date))) %>% 
+  rename(customer_email = "email_address",
+         order_date = "signup_date",
+         order_total = "charge_total",
+         product_details = "product_name") %>% 
+  add_rownames(var = "order_id") %>%  # No ID found in this source, making one up from row number
+  mutate(order_id = as.character(order_id),
+         file_source = "MiniBC.csv")
+
+shopify <- read_csv(file = "Data\\ShopifyOrders.csv") %>% 
+# tt <- shopify %>%
+  rename_all(~ tolower(x = .)) %>%
+  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
+  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
+  select(id, email, created_at, 
+         # cancelled_at,  # Not sure if we want to use - no values for any
+         lineitem_name, total, lineitem_price) %>% 
+  mutate(created_at = date(with_tz(time = ymd_hms(created_at), tzone = "America/Chicago")),
+         # cancelled_at = date(with_tz(time = ymd_hms(cancelled_at), tzone = "America/Chicago"))
+         id = format(id, scientific = F)) %>% 
+  rename(customer_email = "email",
+         order_date = "created_at",
+         order_total = "total",
+         product_details = "lineitem_name",
+         order_id = "id",
+         product_price = "lineitem_price") %>% 
+  mutate(order_id = as.character(order_id),
+         file_source = "ShopifyOrders.csv")
+
+platform_data <- bind_rows(big_comm, bold_v1, give_orders, mini_bc, shopify) %>% 
+  mutate(customer_email_lower = str_to_lower(string = customer_email))  # Unique customers based on this
+
+```
+
+## Classify Product Cohorts
+
+```{r}
+
+## Additional data to aid in classification 
+
+alt_entry_customers <- read_csv(file = "Data\\AlternateEntryCustomers.csv") %>% 
+  rename_all(~ tolower(x = .)) %>%
+  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
+  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
+  select(email, klaviyo_id, profile_created_on) #%>% 
+  # mutate(email = str_to_lower(email))  # Test this to see if it makes a difference
+
+# Update or add to where necessary - right now this has members, one-time, and alt entry
+  # Subject to change - calling One-time *bonus a One-Time, Same with Member - month free
+
+products_classified <- read_csv(file = "Data\\ProductsClassified.csv") %>% 
+  rename_all(~ tolower(x = .)) %>%
+  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
+  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
+  mutate(grp = if_else(condition = str_detect(string = classification, pattern = "Member"),
+                       true = "Member",
+                       false = if_else(condition = str_detect(string = classification, pattern = "One-time"),
+                                       true = "One-time",
+                                       false = "Other")))
+
+# Good stopping point - add-in the bonus entry next
+
+platform_data_classified <- platform_data %>% 
+  mutate(alt_entry = if_else(condition = customer_email_lower %in% c(alt_entry_customers$email),  # Comment when done
+                             true = "Yes",
+                             false = "No"),
+         # Going to prioritize alt entry over member and one-time, add the 
+         grp = if_else(condition = customer_email_lower %in% c(alt_entry_customers$email),  # Comment when done
+                             true = "alt_entry",
+                             false = if_else(condition = product_details %in% c(products_classified$product_details[products_classified$grp == "Member"]),
+                                             true = "Member",
+                                             false = if_else(condition = product_details %in% 
+                                                               c(products_classified$product_details[products_classified$grp == "One-time"]),
+                                                             true = "One-time",
+                                                             false = "Other"))))
+
+## NEXT ##
+
+# 1. After classifications - ID first purchase and classify cohort
+# 2. ID when the customer is lost
+
+# summary(as.factor(platform_data_classified$alt_entry))
+
+# Decided based on this to lowercase the emails - know for sure I saw at least one example where to not lowercase would have caused there to be two separate
+  # emails that were really the same
+
+## Delete or move later
+# upcased_emails <- platform_data %>% group_by(customer_email) %>% tally() %>% arrange(desc(n))  # All
+# 
+# lowcase_emails <- platform_data %>% mutate(customer_email = str_to_lower(string = customer_email)) %>%  # lower cased
+#   group_by(customer_email) %>% tally() %>% arrange(desc(n)) %>% ungroup()
+# 
+# tt <- upcased_emails %>% 
+#   select(customer_email) %>%
+#   mutate(not_in_lower = if_else(condition = customer_email %in% c(lowcase_emails$customer_email),
+#                                 true = "Kept",
+#                                 false = "Lost"),
+#          customer_email_lower = str_to_lower(string = customer_email))
+  # mutate(customer_email_lower = str_to_lower(string = customer_email),
+         # case_diff = if_else(condition = customer_email != customer_email_lower,
+                             # true = "Different",
+                             # false = "Same"))
+
+# xx <- tt %>% filter(not_in_lower == "Lost")
+
+# tt <- products_classified %>% group_by(grp, classification) %>% tally()
+
+```
+
+
+```{r}
+
+# Might want to write platform data to csv and then read that in
+
+
+
+```
+
+## Getting Product Lists to One-Country 
+
+Can move/delete this as it was just exploratory. 
+
+```{r}
+
+# Next:
+  # Address questions above
+  # See about cancel dates and how we may define them where not present
+  # Classify each product according to the classification scheme
+
+# Classify products according to specs
+
+unique_products <- platform_data %>% 
+  # distinct(products) %>% 
+  group_by(product_details, product_price) %>% 
+  tally() %>% 
+  arrange(desc(n))
+
+```
+
+```{r}
+
+# Classifying alternate entries
+
+product_name_has_free <- unique_products %>% 
+  filter(str_detect(string = product_details, pattern = "free"))
+
+```
+
+```{r eval=FALSE}
+
+# Writing out products for classification
+
+write_csv(unique_products,
+          path = "Exploratory Output\\Unique Products and Prices.csv")
+
+write_csv(product_name_has_free,
+          path = "Exploratory Output\\Products with Free in Product Names.csv")
+
+```
+
+
+```{r}
+
+# Testing where product price is not there
+
+# All good now
+
+sum(is.na(platform_data$canceled_date))
+
+sum(!is.na(platform_data$canceled_date))
+
+sum(!is.na(platform_data$canceled_date))/nrow(platform_data) * 100
+
+tt <- platform_data %>% filter(is.na(canceled_date))
+
+sort(unique(tt$file_source))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -201,7 +201,8 @@ shopify <- read_csv(file = "Data\\ShopifyOrders.csv") %>%
          file_source = "ShopifyOrders.csv")
 
 platform_data <- bind_rows(big_comm, bold_v1, give_orders, mini_bc, shopify) %>% 
-  mutate(customer_email_lower = str_to_lower(string = customer_email))  # Unique customers based on this
+  mutate(customer_email_lower = str_to_lower(string = customer_email)) %>%   # Unique customers based on this
+  mutate(yr_mo_order = ymd(paste(year(order_date), month(order_date), "1", sep = "-")))
 
 ```
 
@@ -237,7 +238,7 @@ platform_data_classified <- platform_data %>%
   mutate(alt_entry = if_else(condition = customer_email_lower %in% c(alt_entry_customers$email),  # Comment when done
                              true = "Yes",
                              false = "No"),
-         # Going to prioritize alt entry over member and one-time, add the 
+         # Going to prioritize alt entry over member and one-time, add the bonus entries when that comes in
          grp = if_else(condition = customer_email_lower %in% c(alt_entry_customers$email),  # Comment when done
                              true = "alt_entry",
                              false = if_else(condition = product_details %in% c(products_classified$product_details[products_classified$grp == "Member"]),
@@ -247,10 +248,7 @@ platform_data_classified <- platform_data %>%
                                                              true = "One-time",
                                                              false = "Other"))))
 
-## NEXT ##
-
-# 1. After classifications - ID first purchase and classify cohort
-# 2. ID when the customer is lost
+# KEEP BELOW IN HERE TO JUSTIFY LOWERE CASING THE EMAISL
 
 # summary(as.factor(platform_data_classified$alt_entry))
 
@@ -279,6 +277,40 @@ platform_data_classified <- platform_data %>%
 # tt <- products_classified %>% group_by(grp, classification) %>% tally()
 
 ```
+
+
+```{r}
+
+## NEXT ##
+
+# 1. After classifications - ID first purchase and classify cohort DONE
+# 2. ID when the customer is lost DONE BUT still evaluating
+# 3. Once we get to the point of aggregation also aggregate the product sales
+
+platform_data_cohorts <- platform_data_classified %>% 
+  # filter(customer_email %in% c("Kylepyeoman@gmail.com", "trendaadkins@yahoo.com", "hopeangeltaylor@icloud.com")) %>% ## For testing - comment out
+  arrange(customer_email, order_date) %>% 
+  group_by(customer_email) %>% 
+  # arrange(order_date) %>% 
+  mutate(customer_transaction_number = row_number()) %>% 
+  ungroup() %>% 
+  mutate(cohort = if_else(condition = customer_transaction_number == 1,
+                          true = paste0(grp, " ", month(order_date, label = T), "/", year(order_date)),
+                          false = ""),
+         cohort = na_if(cohort, "")) %>% 
+  fill(cohort, .direction = "down") %>% 
+  # Follows the text definition - but I don't think that's the way we should define it
+  group_by(customer_email) %>% 
+  mutate(total_transactions = max(customer_transaction_number),
+         customer_lost = if_else(condition = !is.na(canceled_date) & customer_transaction_number == total_transactions,
+                                 true = 1,
+                                 false = 0)) %>% 
+  ungroup()
+
+# Figure out how to ID if any customer is lost to churn
+
+```
+
 
 
 ```{r}

@@ -246,7 +246,10 @@ platform_data_classified <- platform_data %>%
                                              false = if_else(condition = product_details %in% 
                                                                c(products_classified$product_details[products_classified$grp == "One-time"]),
                                                              true = "One-time",
-                                                             false = "Other"))))
+                                                             false = "Other"))),
+         sales_status = if_else(condition = product_details %in% c(products_classified$product_details[products_classified$classification == "Product"]),
+                                true = "Product",
+                                false = "Other"))
 
 # KEEP BELOW IN HERE TO JUSTIFY LOWERE CASING THE EMAISL
 
@@ -284,7 +287,7 @@ platform_data_classified <- platform_data %>%
 ## NEXT ##
 
 # 1. After classifications - ID first purchase and classify cohort DONE
-# 2. ID when the customer is lost DONE BUT still evaluating
+# 2. ID when the customer is lost DONE
 # 3. Once we get to the point of aggregation also aggregate the product sales
 
 platform_data_cohorts <- platform_data_classified %>% 
@@ -302,10 +305,16 @@ platform_data_cohorts <- platform_data_classified %>%
   # Follows the text definition - but I don't think that's the way we should define it
   group_by(customer_email) %>% 
   mutate(total_transactions = max(customer_transaction_number),
-         customer_lost = if_else(condition = !is.na(canceled_date) & customer_transaction_number == total_transactions,
-                                 true = 1,
-                                 false = 0)) %>% 
-  ungroup()
+         max_cancel_date = max(canceled_date, na.rm = T)) %>% 
+  fill(max_cancel_date, .direction = "down") %>% 
+  ungroup() %>% 
+  mutate(customer_lost = if_else(condition = !is.na(max_cancel_date) & 
+                                             customer_transaction_number == total_transactions &
+                                             order_date < max_cancel_date,
+                                 # true = 1,
+                                 # false = 0))
+                                 true = "Lost",
+                                 false = "Retained"))
 
 # Figure out how to ID if any customer is lost to churn
 
@@ -317,7 +326,8 @@ platform_data_cohorts <- platform_data_classified %>%
 
 # Might want to write platform data to csv and then read that in
 
-
+write_csv(platform_data_cohorts,
+          path = "Output Data\\cohorts_classified.csv")
 
 ```
 

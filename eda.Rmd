@@ -33,6 +33,12 @@ library(gt)
 
 ## Info About Files
 
+Notes:
+* Go through each of the original sales files, get all the column names for each file, recycle the file name and add to column names for each
+
+Additional Context:
+
+
 ```{r}
 
 file_list <- list.files("Data")
@@ -52,35 +58,23 @@ for(i in file_list){
   
 }
 
-# bold_v1 <- read_csv(file = "Data\\Boldv1.csv")
-# 
-# big_comm <- read_csv(file = "Data\\BigcommerceOrders.csv")
-# 
-# xx <- big_comm %>% distinct(`Product Details`) %>% as_tibble()
-
 ```
 
 ## Gather Transaction Data
 
+Notes:
+* Append all sources together with just the relevant columns - date of event, cancellation (if applicable), product, order totals, product price
+* Creates a new column that is the customer email lowercase as casing varies by order for some customers. And if the casing is different, then the emails will appear to be different. 
+
+Additional Context:
+* Very few cancellation dates
+* For Boldv1 - assuming that inactive_date is the same as cancellation date
+* Boldv2 doesn't have the product name
+* cancelled_at is not populated for any rows in GiveOrders or Shopify
+
 ```{r}
 
-## Append all sources together with just the relevant columns - date of event, cancel (if applicable), product, amounts(s) - preferably the order total amount
-
-# Boldv2.csv GiveOrders.csv MiniBC.csv ShopifyOrders.csv
-
-# Keep the canceled dates for now - but figure out bold v2
-
-# Notes/Questions #
-
-  # Bold2 - No product details
-  # Cancellation dates - most platforms don't have it - some have inactive, same? Where might I find it or just infer?
-  # Is there a possibility that a single transaction can appear in multiple platforms?
-  # Later - do some research on the canceled dates - be sure to surface questions about data ^^
-
-# We also need the item price - as it isn't always in the product name
-
 big_comm <- read_csv(file = "Data\\BigcommerceOrders.csv") %>% 
-# tt <- big_comm %>%
   rename_all(~ tolower(x = .)) %>%
   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
@@ -96,7 +90,6 @@ big_comm <- read_csv(file = "Data\\BigcommerceOrders.csv") %>%
   rename(order_total = "order_total_inc_tax") %>% 
   mutate(file_source = "BigcommerceOrders.csv") %>% 
   rowwise() %>% 
-  # Figure out why I'm not picking all these up
   mutate(product_price = as.double(str_remove_all(string = str_split(string = str_split(string = product_details, 
                                                                                         pattern = ",")[[1]][length(str_split(string = product_details, 
                                                                                                                              pattern = ",")[[1]])], 
@@ -105,12 +98,11 @@ big_comm <- read_csv(file = "Data\\BigcommerceOrders.csv") %>%
   ungroup()
 
 bold_v1 <- read_csv(file = "Data\\Boldv1.csv") %>% 
-# tt <- bold_v1 %>% 
   rename_all(~ tolower(x = .)) %>%
   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
   select(subscription_id, customer_e_mail, 
-         inactive_date,  # Make sure this is the same as cancellation 
+         inactive_date,  
          subscription_date, products, total_value_of_all_products_shipped) %>% 
   mutate(subscription_date = mdy(subscription_date),
          inactive_date = mdy(inactive_date)) %>% 
@@ -133,18 +125,17 @@ bold_v1 <- read_csv(file = "Data\\Boldv1.csv") %>%
 ## COME BACK - need to know if v2 of Bold has the product subscribed to
 
 # bold_v2 <- read_csv(file = "Data\\Boldv2.csv") %>%   # Maybe skip this for now since it's missing the product??
-# tt <- bold_v2 %>%
+# # tt <- bold_v2 %>%
 #   rename_all(~ tolower(x = .)) %>%
-#   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
-#   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
-#   rename_all(~ gsub(pattern = "/", replacement = "_", x = ., fixed = T)) %>% 
-#   select(customer_email, created_at, 
+#   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>%
+#   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>%
+#   rename_all(~ gsub(pattern = "/", replacement = "_", x = ., fixed = T)) %>%
+#   select(customer_email, created_at,
 #          # canceled_at,  # Maybe need - think about it
 #          # products,  # Not finding this
 #          total_value_charged)
 
 give_orders <- read_csv(file = "Data\\GiveOrders.csv") %>% 
-# tt <- give_orders %>%
   rename_all(~ tolower(x = .)) %>%
   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
@@ -162,10 +153,9 @@ give_orders <- read_csv(file = "Data\\GiveOrders.csv") %>%
          product_price = "lineitem_price") %>% 
   mutate(order_id = as.character(order_id),
          file_source = "GiveOrders.csv") %>% 
-  filter(!is.na(product_price))  # Looks like there's about 17 rows - and those 17 seem completely screwed up 
+  filter(!is.na(product_price))  
 
 mini_bc <- read_csv(file = "Data\\MiniBC.csv") %>% 
-# tt <- mini_bc %>%
   rename_all(~ tolower(x = .)) %>%
   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
@@ -181,7 +171,6 @@ mini_bc <- read_csv(file = "Data\\MiniBC.csv") %>%
          file_source = "MiniBC.csv")
 
 shopify <- read_csv(file = "Data\\ShopifyOrders.csv") %>% 
-# tt <- shopify %>%
   rename_all(~ tolower(x = .)) %>%
   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
@@ -208,19 +197,29 @@ platform_data <- bind_rows(big_comm, bold_v1, give_orders, mini_bc, shopify) %>%
 
 ## Classify Product Cohorts
 
-```{r}
+Notes:
+* Each row was classified according to the cohort it would fall under. Later, just the first order for each customer was used to assign all orders to the cohort of the first purchase. 
+* Classifying clients based on their first known purchase. Classifying them by year and month of that purchase as well as if they were an alternate entry or bonus entry lead or if they were not in these lead lists, by the product they purchased classified as either Member or One-time. Product classifications and leads were provided by Neil. 
+* Further classified customers into sub groups (where applicable). For example, One-Time purchases classified further as either 5, 10 dollars,  etc
 
-## Additional data to aid in classification 
+Additional Context:
+* Rounding for sub-group classification applied where appropriate. For example, 24.99 and 25 were both considered 25.
+
+```{r}
 
 alt_entry_customers <- read_csv(file = "Data\\AlternateEntryCustomers.csv") %>% 
   rename_all(~ tolower(x = .)) %>%
   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
-  select(email, klaviyo_id, profile_created_on) #%>% 
-  # mutate(email = str_to_lower(email))  # Test this to see if it makes a difference
+  select(email, klaviyo_id, profile_created_on) %>% 
+  mutate(email = str_to_lower(string = email))
 
-# Update or add to where necessary - right now this has members, one-time, and alt entry
-  # Subject to change - calling One-time *bonus a One-Time, Same with Member - month free
+bonus_entry_leads <- read_csv(file = "Data\\BonusEntryCustomers.csv") %>% 
+  rename_all(~ tolower(x = .)) %>%
+  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
+  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
+  select(email, profile_created_on, total_customer_lifetime_value) %>% 
+  mutate(email = str_to_lower(string = email))
 
 products_classified <- read_csv(file = "Data\\ProductsClassified.csv") %>% 
   rename_all(~ tolower(x = .)) %>%
@@ -232,31 +231,41 @@ products_classified <- read_csv(file = "Data\\ProductsClassified.csv") %>%
                                        true = "One-time",
                                        false = "Other")))
 
-# Good stopping point - add-in the bonus entry next
-
 platform_data_classified <- platform_data %>% 
   mutate(alt_entry = if_else(condition = customer_email_lower %in% c(alt_entry_customers$email),  # Comment when done
                              true = "Yes",
                              false = "No"),
-         # Going to prioritize alt entry over member and one-time, add the bonus entries when that comes in
-         grp = if_else(condition = customer_email_lower %in% c(alt_entry_customers$email),  # Comment when done
-                             true = "alt_entry",
-                             false = if_else(condition = product_details %in% c(products_classified$product_details[products_classified$grp == "Member"]),
-                                             true = "Member",
-                                             false = if_else(condition = product_details %in% 
-                                                               c(products_classified$product_details[products_classified$grp == "One-time"]),
-                                                             true = "One-time",
-                                                             false = "Other"))),
+         grp = case_when(
+           customer_email_lower %in% c(alt_entry_customers$email) ~ "alt_entry",
+           customer_email_lower %in% c(bonus_entry_leads$email) ~ "bonus_entry",
+           product_details %in% c(products_classified$product_details[products_classified$grp == "Member"]) ~ "Member",
+           product_details %in% c(products_classified$product_details[products_classified$grp == "One-time"]) ~ "One-time",
+           TRUE ~ "Other"
+         ),
+         sub_grp = case_when(
+           grp == "Member" & product_price %in% c(5.00) ~ "$5",
+           grp == "Member" & product_price %in% c(10.00) ~ "$10",
+           grp == "Member" & product_price %in% c(24.99, 25.00, 25.98) ~ "$25",
+           grp == "One-time" & product_price %in% c(10.00) ~ "$10",
+           grp == "One-time" & product_price %in% c(24.99, 25.00, 25.98) ~ "$25",
+           grp == "One-time" & product_price %in% c(49.95, 49.99, 50.00, 50.96) ~ "$50",
+           grp == "One-time" & product_price %in% c(99.95, 99.96, 100.00, 100.99) ~ "$100",
+           grp == "alt_entry" & product_price %in% c(5.00) ~ "$5",
+           grp == "alt_entry" & product_price %in% c(10.00) ~ "$10",
+           grp == "alt_entry" & product_price %in% c(12.00, 12.99) ~ "$12",
+           grp == "alt_entry" & product_price %in% c(15.00, 15.99) ~ "$15",
+           TRUE ~ "Other"
+         ),
          sales_status = if_else(condition = product_details %in% c(products_classified$product_details[products_classified$classification == "Product"]),
                                 true = "Product",
                                 false = "Other"))
 
-# KEEP BELOW IN HERE TO JUSTIFY LOWERE CASING THE EMAISL
+# KEEP BELOW IN HERE TO JUSTIFY LOWERE CASING THE EMAIL - keep if I have to review this again 
 
 # summary(as.factor(platform_data_classified$alt_entry))
 
 # Decided based on this to lowercase the emails - know for sure I saw at least one example where to not lowercase would have caused there to be two separate
-  # emails that were really the same
+# emails that were really the same
 
 ## Delete or move later
 # upcased_emails <- platform_data %>% group_by(customer_email) %>% tally() %>% arrange(desc(n))  # All
@@ -270,10 +279,10 @@ platform_data_classified <- platform_data %>%
 #                                 true = "Kept",
 #                                 false = "Lost"),
 #          customer_email_lower = str_to_lower(string = customer_email))
-  # mutate(customer_email_lower = str_to_lower(string = customer_email),
-         # case_diff = if_else(condition = customer_email != customer_email_lower,
-                             # true = "Different",
-                             # false = "Same"))
+# mutate(customer_email_lower = str_to_lower(string = customer_email),
+# case_diff = if_else(condition = customer_email != customer_email_lower,
+# true = "Different",
+# false = "Same"))
 
 # xx <- tt %>% filter(not_in_lower == "Lost")
 
@@ -281,42 +290,51 @@ platform_data_classified <- platform_data %>%
 
 ```
 
+## Classify All Purchases According to Customer First Transaction
+
+Notes:
+* Identified the first purchase for each customer and classified all subsequent orders to that cohort.
+* Identified when the customer is "lost" - If they had a cancellation date, and no orders beyond that cancellation date, considered them lost. 
+
+Additional Context:
+
 
 ```{r}
 
 ## NEXT ##
 
-# 1. After classifications - ID first purchase and classify cohort DONE
-# 2. ID when the customer is lost DONE
-# 3. Once we get to the point of aggregation also aggregate the product sales
+
 
 platform_data_cohorts <- platform_data_classified %>% 
   # filter(customer_email %in% c("Kylepyeoman@gmail.com", "trendaadkins@yahoo.com", "hopeangeltaylor@icloud.com")) %>% ## For testing - comment out
   arrange(customer_email, order_date) %>% 
   group_by(customer_email) %>% 
-  # arrange(order_date) %>% 
   mutate(customer_transaction_number = row_number()) %>% 
   ungroup() %>% 
   mutate(cohort = if_else(condition = customer_transaction_number == 1,
                           true = paste0(grp, " ", month(order_date, label = T), "/", year(order_date)),
                           false = ""),
-         cohort = na_if(cohort, "")) %>% 
+         cohort = na_if(cohort, ""),
+         first_order_date = if_else(condition = customer_transaction_number == 1,
+                                    true = order_date,
+                                    false = ymd("2099-1-1")),
+         first_order_date = na_if(first_order_date, ymd("2099-1-1"))) %>% 
   fill(cohort, .direction = "down") %>% 
-  # Follows the text definition - but I don't think that's the way we should define it
+  fill(first_order_date, .direction = "down") %>% 
   group_by(customer_email) %>% 
   mutate(total_transactions = max(customer_transaction_number),
          max_cancel_date = max(canceled_date, na.rm = T)) %>% 
   fill(max_cancel_date, .direction = "down") %>% 
   ungroup() %>% 
   mutate(customer_lost = if_else(condition = !is.na(max_cancel_date) & 
-                                             customer_transaction_number == total_transactions &
-                                             order_date < max_cancel_date,
+                                   customer_transaction_number == total_transactions &
+                                   order_date < max_cancel_date,
                                  # true = 1,
                                  # false = 0))
                                  true = "Lost",
-                                 false = "Retained"))
-
-# Figure out how to ID if any customer is lost to churn
+                                 false = "Retained")) %>% 
+  rowwise() %>% 
+  mutate(months_since_first_purchase = interval(first_order_date, order_date) %/% months(1))
 
 ```
 
@@ -331,16 +349,16 @@ write_csv(platform_data_cohorts,
 
 ```
 
-## Getting Product Lists to One-Country 
+# Can move this as it was just exploratory. - Not releveant to future analysis
 
-Can move/delete this as it was just exploratory. 
+## Getting Product Lists to One-Country 
 
 ```{r}
 
 # Next:
-  # Address questions above
-  # See about cancel dates and how we may define them where not present
-  # Classify each product according to the classification scheme
+# Address questions above
+# See about cancel dates and how we may define them where not present
+# Classify each product according to the classification scheme
 
 # Classify products according to specs
 

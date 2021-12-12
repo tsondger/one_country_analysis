@@ -29,6 +29,14 @@ library(tibble)
 library(kableExtra)
 library(gt)
 
+## Next Steps ##
+
+# Provide a way to look at cohort LTV in $/customer or total customers in addition to or instead of just total $ in orders (pbi calc measure)
+# When I get to churn, expect to see around 8%/month to sanity check the numbers shown (sanity check - add measure for churn)
+
+# See why months since first purchase is blank ever - it's bold v2 - see why
+# See why degredation of overall spend is dropping off so much - try looking at a few. Should be much less steep. Try a few individual ppl as well. 
+
 ```
 
 ## Info About Files
@@ -124,16 +132,30 @@ bold_v1 <- read_csv(file = "Data\\Boldv1.csv") %>%
 
 ## COME BACK - need to know if v2 of Bold has the product subscribed to
 
-# bold_v2 <- read_csv(file = "Data\\Boldv2.csv") %>%   # Maybe skip this for now since it's missing the product??
-# # tt <- bold_v2 %>%
-#   rename_all(~ tolower(x = .)) %>%
-#   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>%
-#   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>%
-#   rename_all(~ gsub(pattern = "/", replacement = "_", x = ., fixed = T)) %>%
-#   select(customer_email, created_at,
-#          # canceled_at,  # Maybe need - think about it
-#          # products,  # Not finding this
-#          total_value_charged)
+bold_v2 <- read_csv(file = "Data\\Boldv2.csv") %>%   # Maybe skip this for now since it's missing the product??
+# tt <- bold_v2 %>%
+  rename_all(~ tolower(x = .)) %>%
+  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>%
+  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>%
+  rename_all(~ gsub(pattern = "/", replacement = "_", x = ., fixed = T)) %>%
+  mutate(products = "None in file") %>% 
+  select(subscription_id, customer_email, created_at,
+         canceled_at,  # Maybe need - think about it
+         products,  # Not finding this
+         total_value_charged) %>% 
+  mutate(created_at = ymd_hms(created_at),
+         created_at = date(created_at),
+         canceled_at = ymd_hms(canceled_at),
+         canceled_at = date(canceled_at)) %>% 
+  rename(order_date = "created_at",
+         customer_email = "customer_email",
+         order_total = "total_value_charged",
+         product_details = "products",
+         canceled_date = "canceled_at",
+         order_id = "subscription_id") %>%
+  mutate(order_id = as.character(order_id),
+         file_source = "Boldv2.csv") %>% 
+  mutate(product_price = 10)
 
 give_orders <- read_csv(file = "Data\\GiveOrders.csv") %>% 
   rename_all(~ tolower(x = .)) %>%
@@ -189,7 +211,7 @@ shopify <- read_csv(file = "Data\\ShopifyOrders.csv") %>%
   mutate(order_id = as.character(order_id),
          file_source = "ShopifyOrders.csv")
 
-platform_data <- bind_rows(big_comm, bold_v1, give_orders, mini_bc, shopify) %>% 
+platform_data <- bind_rows(big_comm, bold_v1, bold_v2, give_orders, mini_bc, shopify) %>% 
   mutate(customer_email_lower = str_to_lower(string = customer_email)) %>%   # Unique customers based on this
   mutate(yr_mo_order = ymd(paste(year(order_date), month(order_date), "1", sep = "-")))
 
@@ -235,16 +257,20 @@ platform_data_classified <- platform_data %>%
   mutate(alt_entry = if_else(condition = customer_email_lower %in% c(alt_entry_customers$email),  # Comment when done
                              true = "Yes",
                              false = "No"),
-         grp = case_when(
+         customer_entry = case_when(
            customer_email_lower %in% c(alt_entry_customers$email) ~ "alt_entry",
            customer_email_lower %in% c(bonus_entry_leads$email) ~ "bonus_entry",
-           product_details %in% c(products_classified$product_details[products_classified$grp == "Member"]) ~ "Member",
+           TRUE ~ "Other"
+         ),
+         grp = case_when(
+           product_details %in% c(products_classified$product_details[products_classified$grp == "Member"]) | 
+             file_source == "Boldv2.csv" ~ "Member",
            product_details %in% c(products_classified$product_details[products_classified$grp == "One-time"]) ~ "One-time",
            TRUE ~ "Other"
          ),
          sub_grp = case_when(
            grp == "Member" & product_price %in% c(5.00) ~ "$5",
-           grp == "Member" & product_price %in% c(10.00) ~ "$10",
+           (grp == "Member" & product_price %in% c(10.00)) | file_source == "Boldv2.csv" ~ "$10",
            grp == "Member" & product_price %in% c(24.99, 25.00, 25.98) ~ "$25",
            grp == "One-time" & product_price %in% c(10.00) ~ "$10",
            grp == "One-time" & product_price %in% c(24.99, 25.00, 25.98) ~ "$25",
@@ -301,26 +327,63 @@ Additional Context:
 
 ```{r}
 
-## NEXT ##
-
-
-
-platform_data_cohorts <- platform_data_classified %>% 
-  # filter(customer_email %in% c("Kylepyeoman@gmail.com", "trendaadkins@yahoo.com", "hopeangeltaylor@icloud.com")) %>% ## For testing - comment out
+platform_data_cohorts <- platform_data_classified %>%
+# xx <- platform_data_classified %>%   # For testing
+  # filter(customer_email %in% c("Kylepyeoman@gmail.com", "trendaadkins@yahoo.com", "hopeangeltaylor@icloud.com",
+                               # "0.betwixbeginningbeyond.1@gmail.com", "001sharpshot@gmail.com", "005075118@coyote.csusb.edu", "007boyce.b.hamilton@gmail.com"
+                               # )) %>% ## For testing - comment out
   arrange(customer_email, order_date) %>% 
   group_by(customer_email) %>% 
-  mutate(customer_transaction_number = row_number()) %>% 
+  mutate(customer_transaction_number_classify = if_else(condition = grp %in% c("Member", "One-time"),  # Testing
+                                                        true = row_number(),
+                                                        false = as.integer(0)),
+         customer_transaction_number_classify = na_if(customer_transaction_number_classify, 0),
+         customer_transaction_number = row_number(),
+         first_customer_order = min(customer_transaction_number_classify, na.rm = T)) %>% 
+  # mutate(customer_transaction_number = row_number()) #%>%  # Original
   ungroup() %>% 
-  mutate(cohort = if_else(condition = customer_transaction_number == 1,
+  mutate(cohort = if_else(condition = customer_transaction_number_classify == first_customer_order,  # Testing
                           true = paste0(grp, " ", month(order_date, label = T), "/", year(order_date)),
                           false = ""),
          cohort = na_if(cohort, ""),
-         first_order_date = if_else(condition = customer_transaction_number == 1,
+         first_order_date = if_else(condition = customer_transaction_number_classify == first_customer_order,
                                     true = order_date,
                                     false = ymd("2099-1-1")),
-         first_order_date = na_if(first_order_date, ymd("2099-1-1"))) %>% 
+         first_order_date = na_if(first_order_date, ymd("2099-1-1")),
+         cohort_grp = if_else(condition = customer_transaction_number_classify == first_customer_order,
+                              true = grp,
+                              false = ""),
+         cohort_grp = na_if(cohort_grp, ""),
+         cohort_sub_grp = if_else(condition = customer_transaction_number_classify == first_customer_order,
+                                  true = sub_grp,
+                                  false = ""),
+         cohort_sub_grp = na_if(cohort_sub_grp, "")) %>% 
+  # mutate(cohort = if_else(condition = customer_transaction_number == 1,  # Original
+  #                         true = paste0(grp, " ", month(order_date, label = T), "/", year(order_date)),
+  #                         false = ""),
+  #        cohort = na_if(cohort, ""),
+  #        first_order_date = if_else(condition = customer_transaction_number == 1,
+  #                                   true = order_date,
+  #                                   false = ymd("2099-1-1")),
+  #        first_order_date = na_if(first_order_date, ymd("2099-1-1")),
+  #        cohort_grp = if_else(condition = customer_transaction_number == 1,
+  #                             true = grp,
+  #                             false = ""),
+  #        cohort_grp = na_if(cohort_grp, ""),
+  #        cohort_sub_grp = if_else(condition = customer_transaction_number == 1,
+  #                                 true = sub_grp,
+  #                                 false = ""),
+  #        cohort_sub_grp = na_if(cohort_sub_grp, "")) %>% 
   fill(cohort, .direction = "down") %>% 
   fill(first_order_date, .direction = "down") %>% 
+  fill(cohort_grp, .direction = "down") %>% 
+  fill(cohort_sub_grp, .direction = "down") %>% 
+  
+  fill(cohort, .direction = "up") %>% 
+  fill(first_order_date, .direction = "up") %>% 
+  fill(cohort_grp, .direction = "up") %>% 
+  fill(cohort_sub_grp, .direction = "up") %>% 
+  
   group_by(customer_email) %>% 
   mutate(total_transactions = max(customer_transaction_number),
          max_cancel_date = max(canceled_date, na.rm = T)) %>% 
@@ -329,12 +392,11 @@ platform_data_cohorts <- platform_data_classified %>%
   mutate(customer_lost = if_else(condition = !is.na(max_cancel_date) & 
                                    customer_transaction_number == total_transactions &
                                    order_date < max_cancel_date,
-                                 # true = 1,
-                                 # false = 0))
                                  true = "Lost",
                                  false = "Retained")) %>% 
   rowwise() %>% 
-  mutate(months_since_first_purchase = interval(first_order_date, order_date) %/% months(1))
+  mutate(months_since_first_purchase = interval(first_order_date, order_date) %/% months(1)) %>% 
+  filter(months_since_first_purchase >= 0)
 
 ```
 
@@ -348,6 +410,17 @@ write_csv(platform_data_cohorts,
           path = "Output Data\\cohorts_classified.csv")
 
 ```
+
+## Checking Data
+
+```{r eval=FALSE}
+
+tt <- read_csv(file = "Output Data\\cohorts_classified.csv")
+
+# xx <- tt %>% filter(months_since_first_purchase < 0)
+
+```
+
 
 # Can move this as it was just exploratory. - Not releveant to future analysis
 

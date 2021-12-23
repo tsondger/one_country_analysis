@@ -327,26 +327,25 @@ Additional Context:
 
 ```{r}
 
+# NEED TO RUN ALL - then try in Power BI
+
 platform_data_cohorts <- platform_data_classified %>%
 # xx <- platform_data_classified %>%   # For testing
   # filter(customer_email %in% c("Kylepyeoman@gmail.com", "trendaadkins@yahoo.com", "hopeangeltaylor@icloud.com",
-                               # "0.betwixbeginningbeyond.1@gmail.com", "001sharpshot@gmail.com", "005075118@coyote.csusb.edu", "007boyce.b.hamilton@gmail.com"
-                               # )) %>% ## For testing - comment out
+  #                              "0.betwixbeginningbeyond.1@gmail.com", "001sharpshot@gmail.com", "005075118@coyote.csusb.edu", "007boyce.b.hamilton@gmail.com"
+  #                              )) %>% ## For general testing - comment out
+  # filter(customer_email == "1030Lashaunfleming@gmail.com") %>%  # For testing mixed carts
   arrange(customer_email, order_date) %>% 
   group_by(customer_email) %>% 
-  mutate(customer_transaction_number_classify = if_else(condition = grp %in% c("Member", "One-time"),  # Testing
+  mutate(customer_transaction_number_classify = if_else(condition = grp %in% c("Member", "One-time"), 
                                                         true = row_number(),
                                                         false = as.integer(0)),
          customer_transaction_number_classify = na_if(customer_transaction_number_classify, 0),
          customer_transaction_number = row_number(),
-         first_customer_order = min(customer_transaction_number_classify, na.rm = T)) %>% 
-  # mutate(customer_transaction_number = row_number()) #%>%  # Original
+         first_customer_order = min(customer_transaction_number_classify, na.rm = T),
+         min_transaction_date = min(order_date, na.rm = T)) %>% 
   ungroup() %>% 
-  mutate(cohort = if_else(condition = customer_transaction_number_classify == first_customer_order,  # Testing
-                          true = paste0(grp, " ", month(order_date, label = T), "/", year(order_date)),
-                          false = ""),
-         cohort = na_if(cohort, ""),
-         first_order_date = if_else(condition = customer_transaction_number_classify == first_customer_order,
+  mutate(first_order_date = if_else(condition = customer_transaction_number_classify == first_customer_order,
                                     true = order_date,
                                     false = ymd("2099-1-1")),
          first_order_date = na_if(first_order_date, ymd("2099-1-1")),
@@ -358,44 +357,49 @@ platform_data_cohorts <- platform_data_classified %>%
                                   true = sub_grp,
                                   false = ""),
          cohort_sub_grp = na_if(cohort_sub_grp, "")) %>% 
-  # mutate(cohort = if_else(condition = customer_transaction_number == 1,  # Original
-  #                         true = paste0(grp, " ", month(order_date, label = T), "/", year(order_date)),
-  #                         false = ""),
-  #        cohort = na_if(cohort, ""),
-  #        first_order_date = if_else(condition = customer_transaction_number == 1,
-  #                                   true = order_date,
-  #                                   false = ymd("2099-1-1")),
-  #        first_order_date = na_if(first_order_date, ymd("2099-1-1")),
-  #        cohort_grp = if_else(condition = customer_transaction_number == 1,
-  #                             true = grp,
-  #                             false = ""),
-  #        cohort_grp = na_if(cohort_grp, ""),
-  #        cohort_sub_grp = if_else(condition = customer_transaction_number == 1,
-  #                                 true = sub_grp,
-  #                                 false = ""),
-  #        cohort_sub_grp = na_if(cohort_sub_grp, "")) %>% 
+  group_by(customer_email) %>% 
+  mutate(cohort_grp = if_else(condition = order_date == min_transaction_date & any(grp == "Member"),
+                              true = "Member",
+                              false = cohort_grp),
+         cohort_sub_grp = case_when(
+           order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$10") ~ "$10",
+           order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$100") ~ "$100",
+           order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$25") ~ "$25",
+           order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$5") ~ "$5",
+           order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$50") ~ "$50",
+           TRUE ~ "Other")) %>% 
+  ungroup() %>% 
+  mutate(cohort = if_else(condition = customer_transaction_number_classify == first_customer_order,  # Testing
+                          true = paste0(cohort_grp, " ", month(order_date, label = T), "/", year(order_date)),
+                          false = ""),
+         cohort = na_if(cohort, "")) %>% 
   fill(cohort, .direction = "down") %>% 
   fill(first_order_date, .direction = "down") %>% 
   fill(cohort_grp, .direction = "down") %>% 
   fill(cohort_sub_grp, .direction = "down") %>% 
-  
   fill(cohort, .direction = "up") %>% 
   fill(first_order_date, .direction = "up") %>% 
   fill(cohort_grp, .direction = "up") %>% 
   fill(cohort_sub_grp, .direction = "up") %>% 
-  
   group_by(customer_email) %>% 
   mutate(total_transactions = max(customer_transaction_number),
-         max_cancel_date = max(canceled_date, na.rm = T)) %>% 
+         max_cancel_date = max(canceled_date, na.rm = T),
+         max_transaction_date = max(order_date, na.rm = T),
+         yr_mo_first_order = ymd(paste(year(first_order_date), month(first_order_date), "1", sep = "-"))) %>% 
   fill(max_cancel_date, .direction = "down") %>% 
+  fill(max_transaction_date, .direction = "down") %>% 
   ungroup() %>% 
-  mutate(customer_lost = if_else(condition = !is.na(max_cancel_date) & 
-                                   customer_transaction_number == total_transactions &
-                                   order_date < max_cancel_date,
+  mutate(transaction_within_past_60_days = if_else(condition = max_transaction_date > (Sys.Date() - 60),
+                                                   true = "Yes",
+                                                   false = "No"),
+         customer_lost = if_else(condition = (!is.na(max_cancel_date) & customer_transaction_number == total_transactions & order_date < max_cancel_date) |
+                                   (!is.na(max_cancel_date) & customer_transaction_number == total_transactions & transaction_within_past_60_days == "No")
+                                 ,
                                  true = "Lost",
                                  false = "Retained")) %>% 
   rowwise() %>% 
   mutate(months_since_first_purchase = interval(first_order_date, order_date) %/% months(1)) %>% 
+  ungroup() %>% 
   filter(months_since_first_purchase >= 0)
 
 ```
@@ -415,9 +419,19 @@ write_csv(platform_data_cohorts,
 
 ```{r eval=FALSE}
 
-tt <- read_csv(file = "Output Data\\cohorts_classified.csv")
+tt <- read_csv(file = "Output Data\\cohorts_classified.csv") #%>%
 
-# xx <- tt %>% filter(months_since_first_purchase < 0)
+yy <- tt %>% filter(customer_email %in% c(head(yy)))
+
+## These are the unique customers that have a member and one-time purchase on the same date - mixed carts, lots. HERE 
+
+zz <- tt %>%
+  # slice(1:10000) %>% 
+  group_by(customer_email, grp, order_date) %>% 
+  tally() %>% 
+  spread(key = grp, value = n) %>% 
+  filter(!is.na(Member) & !is.na(`One-time`)) %>% 
+  distinct(customer_email)
 
 ```
 

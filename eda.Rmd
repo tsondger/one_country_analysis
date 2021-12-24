@@ -331,9 +331,13 @@ Additional Context:
 
 platform_data_cohorts <- platform_data_classified %>%
 # xx <- platform_data_classified %>%   # For testing
-  # filter(customer_email %in% c("Kylepyeoman@gmail.com", "trendaadkins@yahoo.com", "hopeangeltaylor@icloud.com",
-  #                              "0.betwixbeginningbeyond.1@gmail.com", "001sharpshot@gmail.com", "005075118@coyote.csusb.edu", "007boyce.b.hamilton@gmail.com"
-  #                              )) %>% ## For general testing - comment out
+  # filter(customer_email %in% c(
+  #   "Kylepyeoman@gmail.com", "trendaadkins@yahoo.com", "hopeangeltaylor@icloud.com",
+  #   "0.betwixbeginningbeyond.1@gmail.com", "001sharpshot@gmail.com",
+  #   "005075118@coyote.csusb.edu"
+  #   , "007boyce.b.hamilton@gmail.com",
+  #                              "1030Lashaunfleming@gmail.com"
+  #   )) %>% ## For general testing - comment out
   # filter(customer_email == "1030Lashaunfleming@gmail.com") %>%  # For testing mixed carts
   arrange(customer_email, order_date) %>% 
   group_by(customer_email) %>% 
@@ -361,15 +365,15 @@ platform_data_cohorts <- platform_data_classified %>%
   mutate(cohort_grp = if_else(condition = order_date == min_transaction_date & any(grp == "Member"),
                               true = "Member",
                               false = cohort_grp),
-         cohort_sub_grp = case_when(
+         cohort_sub_grp = case_when(  
            order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$10") ~ "$10",
            order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$100") ~ "$100",
            order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$25") ~ "$25",
            order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$5") ~ "$5",
            order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$50") ~ "$50",
-           TRUE ~ "Other")) %>% 
+           TRUE ~ cohort_sub_grp)) %>%
   ungroup() %>% 
-  mutate(cohort = if_else(condition = customer_transaction_number_classify == first_customer_order,  # Testing
+  mutate(cohort = if_else(condition = customer_transaction_number_classify == first_customer_order, 
                           true = paste0(cohort_grp, " ", month(order_date, label = T), "/", year(order_date)),
                           false = ""),
          cohort = na_if(cohort, "")) %>% 
@@ -421,7 +425,9 @@ write_csv(platform_data_cohorts,
 
 tt <- read_csv(file = "Output Data\\cohorts_classified.csv") #%>%
 
-yy <- tt %>% filter(customer_email %in% c(head(yy)))
+grp_breakdown <- tt %>% 
+  group_by(cohort_grp, cohort_sub_grp) %>% 
+  tally()
 
 ## These are the unique customers that have a member and one-time purchase on the same date - mixed carts, lots. HERE 
 

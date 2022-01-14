@@ -1,1 +1,16 @@
-{"name":"theme created by powerbi.tips https://themes.powerbi.tips","dataColors":["#d02129","#13233e"],"visualStyles":{"*":{"*":{"*":[{"fontSize":"16","fontFamily":"Segoe UI","axisStyle":"showBoth","enableBackground":true,"gridlineShow":true,"labelPrecision":"","responsive":true,"showAxisTitle":true,"showTitle":true,"titleFontSize":"14","titleFontFamily":"Segoe UI"}],"background":[{"show":true}],"border":[{"show":true}],"dropShadow":[{"show":true,"position":"Outer"}]}}}}
+{"name":"theme created by powerbi.tips https://themes.powerbi.tips",
+    "dataColors":["#d02129","#13233e"],
+    "visualStyles":{"*":{"*":{"*":[{"fontSize":"16",
+                                    "fontFamily":"Segoe UI",
+                                    "axisStyle":"showBoth",
+                                    "enableBackground":true,
+                                    "gridlineShow":true,
+                                    "labelPrecision":"",
+                                    "responsive":true,
+                                    "showAxisTitle":true,
+                                    "showTitle":true,
+                                    "titleFontSize":"14",
+                                    "titleFontFamily":"Segoe UI"}],
+                                    "background":[{"show":true}],
+                                    "border":[{"show":true}],
+                                    "dropShadow":[{"show":true,"position":"Outer"}]}}}}

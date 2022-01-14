@@ -82,18 +82,20 @@ Additional Context:
 
 ```{r}
 
-big_comm <- read_csv(file = "Data\\BigcommerceOrders.csv") %>% 
+big_comm <- read_csv(file = "Data\\2021-01-07-bc-orders.csv") %>% 
   rename_all(~ tolower(x = .)) %>%
   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
   rename_all(~ gsub(pattern = "(", replacement = "", x = ., fixed = T)) %>% 
   rename_all(~ gsub(pattern = ")", replacement = "", x = ., fixed = T)) %>% 
-  mutate(order_date_mdy = mdy(order_date),
-         order_date_dmy = dmy(order_date),
-         order_date = if_else(condition = !is.na(order_date_mdy),
-                              true = order_date_mdy,
-                              false = order_date_dmy),
-         order_id = as.character(order_id)) %>% 
+  mutate(
+    # order_date_mdy = mdy(order_date),
+         order_date = dmy(order_date),  # Treal ALL as dmy -- Testing
+         # order_date = if_else(condition = !is.na(order_date_mdy),
+         #                      true = order_date_mdy,
+         #                      false = order_date_dmy),
+         order_id = as.character(order_id)
+    ) %>% 
   select(order_id, customer_email, order_date, order_total_inc_tax, product_details) %>% 
   rename(order_total = "order_total_inc_tax") %>% 
   mutate(file_source = "BigcommerceOrders.csv") %>% 
@@ -103,69 +105,79 @@ big_comm <- read_csv(file = "Data\\BigcommerceOrders.csv") %>%
                                                                                                                              pattern = ",")[[1]])], 
                                                                      pattern = ":", n = 2)[[1]][2], 
                                                   pattern = "[:space:]"))) %>% 
-  ungroup()
+  ungroup() %>% 
+  mutate(product_price = case_when(
+    str_detect(string = product_details, pattern = "Product ID: 3805|Product ID: 5100|Product ID: 4295|Product ID: 3798|Product ID: 3805") ~ 10,
+    str_detect(string = product_details, pattern = "Product ID: 3797") ~ 5,
+    str_detect(string = product_details, pattern = "Product ID: 3799") ~ 15,
+    str_detect(string = product_details, pattern = "Product ID: 3966") ~ 50,
+    str_detect(string = product_details, pattern = "Product ID: 3800|Product ID: 5104") ~ 25,
+    TRUE ~ product_price
+  ))
 
-bold_v1 <- read_csv(file = "Data\\Boldv1.csv") %>% 
-  rename_all(~ tolower(x = .)) %>%
-  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
-  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
-  select(subscription_id, customer_e_mail, 
-         inactive_date,  
-         subscription_date, products, total_value_of_all_products_shipped) %>% 
-  mutate(subscription_date = mdy(subscription_date),
-         inactive_date = mdy(inactive_date)) %>% 
-  rename(order_date = "subscription_date",
-         customer_email = "customer_e_mail",
-         order_total = "total_value_of_all_products_shipped",
-         product_details = "products",
-         canceled_date = "inactive_date",
-         order_id = "subscription_id") %>% 
-  mutate(order_id = as.character(order_id),
-         file_source = "Boldv1.csv") %>% 
-  rowwise() %>% 
-  mutate(product_price = 
-           as.double(str_remove_all(string = str_split(string = 
-                                                         str_split(string = product_details, pattern = "-")[[1]][length(str_split(string = product_details,
-                                                                                                                                  pattern = "-")[[1]])], 
-                                                       pattern = "x")[[1]][1], pattern = "[:space:]"))) %>% 
-  ungroup()
+# bold_v1 <- read_csv(file = "Data\\Boldv1.csv") %>% 
+#   rename_all(~ tolower(x = .)) %>%
+#   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
+#   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
+#   select(subscription_id, customer_e_mail, 
+#          inactive_date,  
+#          subscription_date, products, total_value_of_all_products_shipped) %>% 
+#   mutate(subscription_date = mdy(subscription_date),
+#          inactive_date = mdy(inactive_date)) %>% 
+#   rename(order_date = "subscription_date",
+#          customer_email = "customer_e_mail",
+#          order_total = "total_value_of_all_products_shipped",
+#          product_details = "products",
+#          canceled_date = "inactive_date",
+#          order_id = "subscription_id") %>% 
+#   mutate(order_id = as.character(order_id),
+#          file_source = "Boldv1.csv") %>% 
+#   rowwise() %>% 
+#   mutate(product_price = 
+#            as.double(str_remove_all(string = str_split(string = 
+#                                                          str_split(string = product_details, pattern = "-")[[1]][length(str_split(string = product_details,
+#                                                                                                                                   pattern = "-")[[1]])], 
+#                                                        pattern = "x")[[1]][1], pattern = "[:space:]"))) %>% 
+#   ungroup()
 
 ## COME BACK - need to know if v2 of Bold has the product subscribed to
 
-bold_v2 <- read_csv(file = "Data\\Boldv2.csv") %>%   # Maybe skip this for now since it's missing the product??
-# tt <- bold_v2 %>%
-  rename_all(~ tolower(x = .)) %>%
-  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>%
-  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>%
-  rename_all(~ gsub(pattern = "/", replacement = "_", x = ., fixed = T)) %>%
-  mutate(products = "None in file") %>% 
-  select(subscription_id, customer_email, created_at,
-         canceled_at,  # Maybe need - think about it
-         products,  # Not finding this
-         total_value_charged) %>% 
-  mutate(created_at = ymd_hms(created_at),
-         created_at = date(created_at),
-         canceled_at = ymd_hms(canceled_at),
-         canceled_at = date(canceled_at)) %>% 
-  rename(order_date = "created_at",
-         customer_email = "customer_email",
-         order_total = "total_value_charged",
-         product_details = "products",
-         canceled_date = "canceled_at",
-         order_id = "subscription_id") %>%
-  mutate(order_id = as.character(order_id),
-         file_source = "Boldv2.csv") %>% 
-  mutate(product_price = 10)
+# bold_v2 <- read_csv(file = "Data\\Boldv2.csv") %>%   # Maybe skip this for now since it's missing the product??
+# # tt <- bold_v2 %>%
+#   rename_all(~ tolower(x = .)) %>%
+#   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>%
+#   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>%
+#   rename_all(~ gsub(pattern = "/", replacement = "_", x = ., fixed = T)) %>%
+#   mutate(products = "None in file") %>% 
+#   select(subscription_id, customer_email, created_at,
+#          canceled_at,  # Maybe need - think about it
+#          products,  # Not finding this
+#          total_value_charged) %>% 
+#   mutate(created_at = ymd_hms(created_at),
+#          created_at = date(created_at),
+#          canceled_at = ymd_hms(canceled_at),
+#          canceled_at = date(canceled_at)) %>% 
+#   rename(order_date = "created_at",
+#          customer_email = "customer_email",
+#          order_total = "total_value_charged",
+#          product_details = "products",
+#          canceled_date = "canceled_at",
+#          order_id = "subscription_id") %>%
+#   mutate(order_id = as.character(order_id),
+#          file_source = "Boldv2.csv") %>% 
+#   mutate(product_price = 10)
 
-give_orders <- read_csv(file = "Data\\GiveOrders.csv") %>% 
+give_orders <- read_csv(file = "Data\\2022-01-07_Give.csv") %>% 
   rename_all(~ tolower(x = .)) %>%
   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
   select(id, email, created_at, 
          # cancelled_at,  # May need? - Not populated
          lineitem_name, total, lineitem_price) %>% 
-  mutate(created_at = date(mdy_hm(created_at)),
-         id = format(id, scientific = F)) %>% 
+  mutate(
+    # created_at = date(mdy_hm(created_at)),
+    created_at = ymd(str_sub(string = created_at, start = 1, end = 10)),
+    id = format(id, scientific = F)) %>% 
   rename(customer_email = "email",
          order_date = "created_at",
          # canceled_date = "cancelled_at",  # See note above
@@ -177,22 +189,22 @@ give_orders <- read_csv(file = "Data\\GiveOrders.csv") %>%
          file_source = "GiveOrders.csv") %>% 
   filter(!is.na(product_price))  
 
-mini_bc <- read_csv(file = "Data\\MiniBC.csv") %>% 
-  rename_all(~ tolower(x = .)) %>%
-  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
-  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
-  rename_all(~ gsub(pattern = "/", replacement = "_", x = ., fixed = T)) %>% 
-  select(email_address, signup_date, product_name, charge_total, product_price) %>% 
-  mutate(signup_date = date(mdy_hm(signup_date))) %>% 
-  rename(customer_email = "email_address",
-         order_date = "signup_date",
-         order_total = "charge_total",
-         product_details = "product_name") %>% 
-  add_rownames(var = "order_id") %>%  # No ID found in this source, making one up from row number
-  mutate(order_id = as.character(order_id),
-         file_source = "MiniBC.csv")
+# mini_bc <- read_csv(file = "Data\\MiniBC.csv") %>% 
+#   rename_all(~ tolower(x = .)) %>%
+#   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
+#   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
+#   rename_all(~ gsub(pattern = "/", replacement = "_", x = ., fixed = T)) %>% 
+#   select(email_address, signup_date, product_name, charge_total, product_price) %>% 
+#   mutate(signup_date = date(mdy_hm(signup_date))) %>% 
+#   rename(customer_email = "email_address",
+#          order_date = "signup_date",
+#          order_total = "charge_total",
+#          product_details = "product_name") %>% 
+#   add_rownames(var = "order_id") %>%  # No ID found in this source, making one up from row number
+#   mutate(order_id = as.character(order_id),
+#          file_source = "MiniBC.csv")
 
-shopify <- read_csv(file = "Data\\ShopifyOrders.csv") %>% 
+shopify <- read_csv(file = "Data\\2022-01-07_Shopify.csv") %>% 
   rename_all(~ tolower(x = .)) %>%
   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
@@ -211,7 +223,11 @@ shopify <- read_csv(file = "Data\\ShopifyOrders.csv") %>%
   mutate(order_id = as.character(order_id),
          file_source = "ShopifyOrders.csv")
 
-platform_data <- bind_rows(big_comm, bold_v1, bold_v2, give_orders, mini_bc, shopify) %>% 
+platform_data <- bind_rows(big_comm, 
+                           # bold_v1, bold_v2, 
+                           give_orders, 
+                           # mini_bc, 
+                           shopify) %>% 
   mutate(customer_email_lower = str_to_lower(string = customer_email)) %>%   # Unique customers based on this
   mutate(yr_mo_order = ymd(paste(year(order_date), month(order_date), "1", sep = "-")))
 
@@ -247,13 +263,25 @@ products_classified <- read_csv(file = "Data\\ProductsClassified.csv") %>%
   rename_all(~ tolower(x = .)) %>%
   rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
   rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
-  mutate(grp = if_else(condition = str_detect(string = classification, pattern = "Member"),
-                       true = "Member",
-                       false = if_else(condition = str_detect(string = classification, pattern = "One-time"),
-                                       true = "One-time",
-                                       false = "Other")))
+  mutate(grp = case_when(
+    str_detect(string = classification, pattern = "Member") ~ "Member",
+    str_detect(string = classification, pattern = "bonus") ~ "Bonus",
+    str_detect(string = classification, pattern = "One-time") ~ "One-time",
+    TRUE ~ "Other")) %>% 
+  mutate(grp = case_when(
+    str_detect(string = product_details, pattern = "Product ID: 3805|Product ID: 5100|Product ID: 4295|Product ID: 3798|Product ID: 3797|Product ID: 3799|Product ID: 3966|Product ID: 3800|Product ID: 5104") ~ "Member",
+    TRUE ~ grp
+  ))
+  # mutate(grp = if_else(condition = str_detect(string = classification, pattern = "Member"),
+  #                      true = "Member",
+  #                      false = if_else(condition = str_detect(string = classification, pattern = "One-time"),
+  #                                      true = "One-time",
+  #                                      false = "Other")))
+
+# This is what I need to use to exclude all bonus entry orders from
 
 platform_data_classified <- platform_data %>% 
+  filter(!(product_details %in% c(products_classified$product_details[products_classified$grp == "Bonus"]))) %>%  # New - excluding bonus products, excludes ALOT
   mutate(alt_entry = if_else(condition = customer_email_lower %in% c(alt_entry_customers$email),  # Comment when done
                              true = "Yes",
                              false = "No"),
@@ -262,9 +290,11 @@ platform_data_classified <- platform_data %>%
            customer_email_lower %in% c(bonus_entry_leads$email) ~ "bonus_entry",
            TRUE ~ "Other"
          ),
+         
          grp = case_when(
-           product_details %in% c(products_classified$product_details[products_classified$grp == "Member"]) | 
-             file_source == "Boldv2.csv" ~ "Member",
+           product_details %in% c(products_classified$product_details[products_classified$grp == "Member"]) ~ "Member"
+           # | file_source == "Boldv2.csv" ~ "Member"  # No longer needed
+           ,
            product_details %in% c(products_classified$product_details[products_classified$grp == "One-time"]) ~ "One-time",
            TRUE ~ "Other"
          ),
@@ -330,22 +360,29 @@ Additional Context:
 # NEED TO RUN ALL - then try in Power BI
 
 platform_data_cohorts <- platform_data_classified %>%
-# xx <- platform_data_classified %>%   # For testing
-  # filter(customer_email %in% c(
-  #   "Kylepyeoman@gmail.com", "trendaadkins@yahoo.com", "hopeangeltaylor@icloud.com",
-  #   "0.betwixbeginningbeyond.1@gmail.com", "001sharpshot@gmail.com",
-  #   "005075118@coyote.csusb.edu"
-  #   , "007boyce.b.hamilton@gmail.com",
-  #                              "1030Lashaunfleming@gmail.com"
+# yy <- platform_data_classified %>%   # For testing
+  
+  # Don't think I need this part  
+  filter(file_source %in% c("BigcommerceOrders.csv" , "GiveOrders.csv" , "ShopifyOrders.csv")) %>%  # Testing and excluding subscription platforms, may not work well
+
+  # filter(customer_email_lower %in% c(
+  #   "a.e.flynn@hotmail.com",
+  #   "aaronj.garnica@gmail.com"
   #   )) %>% ## For general testing - comment out
-  # filter(customer_email == "1030Lashaunfleming@gmail.com") %>%  # For testing mixed carts
-  arrange(customer_email, order_date) %>% 
-  group_by(customer_email) %>% 
+  arrange(customer_email_lower, order_date) %>% 
+  group_by(customer_email_lower) %>% 
   mutate(customer_transaction_number_classify = if_else(condition = grp %in% c("Member", "One-time"), 
                                                         true = row_number(),
                                                         false = as.integer(0)),
          customer_transaction_number_classify = na_if(customer_transaction_number_classify, 0),
          customer_transaction_number = row_number(),
+         
+         customer_sub_group_transaction_number_classify = if_else(condition = grp == "Member",
+                                                                  true = row_number(),
+                                                                  false = as.integer(0)),
+         customer_sub_group_transaction_number_classify = na_if(customer_sub_group_transaction_number_classify, 0),
+         min_customer_sub_group_transaction_number_classify = min(customer_sub_group_transaction_number_classify, na.rm = T),
+         
          first_customer_order = min(customer_transaction_number_classify, na.rm = T),
          min_transaction_date = min(order_date, na.rm = T)) %>% 
   ungroup() %>% 
@@ -361,50 +398,78 @@ platform_data_cohorts <- platform_data_classified %>%
                                   true = sub_grp,
                                   false = ""),
          cohort_sub_grp = na_if(cohort_sub_grp, "")) %>% 
-  group_by(customer_email) %>% 
+  group_by(customer_email_lower, order_date) %>%
+  # Think this could be an issue if I'm missing the order_date - think it's the any()
   mutate(cohort_grp = if_else(condition = order_date == min_transaction_date & any(grp == "Member"),
                               true = "Member",
                               false = cohort_grp),
-         cohort_sub_grp = case_when(  
-           order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$10") ~ "$10",
-           order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$100") ~ "$100",
-           order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$25") ~ "$25",
-           order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$5") ~ "$5",
-           order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$50") ~ "$50",
-           TRUE ~ cohort_sub_grp)) %>%
-  ungroup() %>% 
+         # NEW
+         cohort_sub_grp = if_else(condition = any(grp == "Member") &
+                                    customer_sub_group_transaction_number_classify == min_customer_sub_group_transaction_number_classify &
+                                    !is.infinite(min_customer_sub_group_transaction_number_classify)
+                                  & order_date == min_transaction_date  # NEW
+                                  ,
+                                  true = sub_grp,
+                                  false = cohort_sub_grp)) %>%
+  ungroup() %>%
+         # cohort_sub_grp = case_when(
+         #   order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$10") ~ "$10",
+         #   order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$100") ~ "$100",
+         #   order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$5") ~ "$5",
+         #   order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$25") ~ "$25",
+         #   
+         #   order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$50") ~ "$50",
+         #   TRUE ~ cohort_sub_grp)) %>%
+         # cohort_sub_grp = case_when(
+         #   order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$10") ~ "$10",
+         #   order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$100") ~ "$100",
+         #   order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$25") ~ "$25",
+         #   order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$5") ~ "$5",
+         #   order_date == min_transaction_date & any(grp == "Member") & any(sub_grp == "$50") ~ "$50",
+         #   TRUE ~ cohort_sub_grp)) %>%
+  # ungroup() %>%  # Moved
+group_by(customer_email_lower) %>%   
+  fill(first_order_date, .direction = "down") %>% 
+  fill(cohort_grp, .direction = "down") %>% 
+  fill(cohort_sub_grp, .direction = "down") %>% 
+  fill(first_order_date, .direction = "up") %>% 
+  fill(cohort_grp, .direction = "up") %>% 
+  fill(cohort_sub_grp, .direction = "up") %>% 
+  ungroup() %>% # Moved here
   mutate(cohort = if_else(condition = customer_transaction_number_classify == first_customer_order, 
                           true = paste0(cohort_grp, " ", month(order_date, label = T), "/", year(order_date)),
                           false = ""),
          cohort = na_if(cohort, "")) %>% 
+  group_by(customer_email_lower) %>%  # Added
   fill(cohort, .direction = "down") %>% 
-  fill(first_order_date, .direction = "down") %>% 
-  fill(cohort_grp, .direction = "down") %>% 
-  fill(cohort_sub_grp, .direction = "down") %>% 
   fill(cohort, .direction = "up") %>% 
-  fill(first_order_date, .direction = "up") %>% 
-  fill(cohort_grp, .direction = "up") %>% 
-  fill(cohort_sub_grp, .direction = "up") %>% 
-  group_by(customer_email) %>% 
+  # group_by(customer_email_lower) %>% 
   mutate(total_transactions = max(customer_transaction_number),
-         max_cancel_date = max(canceled_date, na.rm = T),
+         # max_cancel_date = max(canceled_date, na.rm = T),
          max_transaction_date = max(order_date, na.rm = T),
          yr_mo_first_order = ymd(paste(year(first_order_date), month(first_order_date), "1", sep = "-"))) %>% 
-  fill(max_cancel_date, .direction = "down") %>% 
+  # fill(max_cancel_date, .direction = "down") %>% 
   fill(max_transaction_date, .direction = "down") %>% 
   ungroup() %>% 
   mutate(transaction_within_past_60_days = if_else(condition = max_transaction_date > (Sys.Date() - 60),
                                                    true = "Yes",
                                                    false = "No"),
-         customer_lost = if_else(condition = (!is.na(max_cancel_date) & customer_transaction_number == total_transactions & order_date < max_cancel_date) |
-                                   (!is.na(max_cancel_date) & customer_transaction_number == total_transactions & transaction_within_past_60_days == "No")
+         customer_lost = if_else(condition = 
+                                   # (!is.na(max_cancel_date) & customer_transaction_number == total_transactions & order_date < max_cancel_date) |
+                                   # (!is.na(max_cancel_date) & 
+                                      customer_transaction_number == total_transactions & transaction_within_past_60_days == "No"
+                                 # )
                                  ,
                                  true = "Lost",
                                  false = "Retained")) %>% 
   rowwise() %>% 
   mutate(months_since_first_purchase = interval(first_order_date, order_date) %/% months(1)) %>% 
   ungroup() %>% 
-  filter(months_since_first_purchase >= 0)
+  filter(months_since_first_purchase >= 0) %>% 
+  filter(!(cohort_grp == "Member" & str_detect(string = cohort, pattern = "One-time")))  # NEW
+
+write_csv(platform_data_cohorts,
+          path = "Output Data\\cohorts_classified.csv")
 
 ```
 
@@ -414,8 +479,8 @@ platform_data_cohorts <- platform_data_classified %>%
 
 # Might want to write platform data to csv and then read that in
 
-write_csv(platform_data_cohorts,
-          path = "Output Data\\cohorts_classified.csv")
+# write_csv(platform_data_cohorts,
+#           path = "Output Data\\cohorts_classified.csv")
 
 ```
 
@@ -423,11 +488,22 @@ write_csv(platform_data_cohorts,
 
 ```{r eval=FALSE}
 
-tt <- read_csv(file = "Output Data\\cohorts_classified.csv") #%>%
+tt <- read_csv(file = "Output Data\\cohorts_classified.csv") %>%
+  # filter(!(cohort_grp == "Member" & str_detect(string = cohort, pattern = "One-time")))
+  filter(customer_email_lower == "a.e.flynn@hotmail.com")
 
 grp_breakdown <- tt %>% 
   group_by(cohort_grp, cohort_sub_grp) %>% 
   tally()
+
+cohort_breakdown <- tt %>% 
+  group_by(cohort_grp, cohort) %>% 
+  tally()
+
+xx <- tt %>% 
+  filter(cohort_grp == "Member" & str_detect(string = cohort, pattern = "One-time"))
+
+zz <- tt %>% filter(customer_email == "jennyequirk@gmail.com")
 
 ## These are the unique customers that have a member and one-time purchase on the same date - mixed carts, lots. HERE 
 

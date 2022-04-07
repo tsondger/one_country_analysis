@@ -1,0 +1,105 @@
+---
+title: "Check Data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(warning = F,
+                      message = F,
+                      echo = F)
+
+library(ggplot2)
+library(reader)
+library(ggthemes)
+library(knitr)
+library(rmarkdown)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(stringr)
+library(shiny)
+library(shinydashboard)
+library(dashboardthemes)
+library(shinyWidgets)
+library(forcats)
+library(readr)
+library(readxl)
+library(tibble)
+library(kableExtra)
+library(gt)
+
+```
+
+## Cohort
+
+```{r eval=FALSE}
+
+# Basically only use as needed
+
+cohorts <- read_csv(file = "Output Data\\cohorts_classified.csv") #%>%
+  # filter(!(cohort_grp == "Member" & str_detect(string = cohort, pattern = "One-time")))
+  # filter(customer_email_lower == "a.e.flynn@hotmail.com")
+
+grp_breakdown <- cohorts %>% 
+  group_by(cohort_grp, cohort_sub_grp) %>% 
+  tally()
+
+cohort_breakdown <- cohorts %>% 
+  group_by(cohort_grp, cohort) %>% 
+  tally()
+
+zero_dollar_products <- cohorts %>% 
+  filter(product_price == 0) %>%
+  distinct(product_details, product_price)
+
+founding_products <- cohorts %>% 
+  filter(str_detect(string = product_details, pattern = "Founding 1C Platinum")) %>%
+  distinct(product_details, product_price)
+
+exclusion_products <- cohorts %>% 
+  filter(product_price == 0 & order_total == 0)
+
+# customer_transaction_number_classify
+# customer_transaction_number
+# cohort_grp
+# cohort_sub_grp
+# Cohort
+# product_details
+
+tt <- cohorts %>% 
+  filter(customer_transaction_number_classify == 1) %>% 
+  group_by(cohort_grp, cohort_sub_grp, cohort, product_details) %>% 
+  tally() %>% 
+  arrange(desc(n))
+
+```
+
+```{r}
+
+write_csv(zero_dollar_products, 
+          path = "Exploratory Output\\0 Dollar products.csv")
+
+write_csv(founding_products, 
+          path = "Exploratory Output\\Founding products.csv")
+
+```
+
+
+## Members
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

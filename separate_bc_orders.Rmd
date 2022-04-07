@@ -1,0 +1,121 @@
+---
+title: "Separate BC Orders"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(warning = F,
+                      message = F,
+                      echo = F)
+
+library(ggplot2)
+library(reader)
+library(ggthemes)
+library(knitr)
+library(rmarkdown)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(stringr)
+library(shiny)
+library(shinydashboard)
+library(dashboardthemes)
+library(shinyWidgets)
+library(forcats)
+library(readr)
+library(readxl)
+library(tibble)
+library(kableExtra)
+library(gt)
+
+```
+
+
+```{r}
+
+# big_comm <- read_csv(file = "Data\\2021-01-07-bc-orders.csv")
+
+big_comm_prods_line_classified <- read_csv(file = "Data\\2021-01-07-bc-orders.csv") %>%
+# tt <- big_comm %>%  # Testing
+  # slice(1:100) %>%  # Testing
+  rename_all(~ tolower(x = .)) %>%
+  rename_all(~ gsub(pattern = " ", replacement = "_", x = .)) %>% 
+  rename_all(~ gsub(pattern = "-", replacement = "_", x = .)) %>% 
+  rename_all(~ gsub(pattern = "(", replacement = "", x = ., fixed = T)) %>% 
+  rename_all(~ gsub(pattern = ")", replacement = "", x = ., fixed = T)) %>% 
+  mutate(customer_email_lower = str_to_lower(string = customer_email),
+         order_date = dmy(order_date),
+         order_id = as.character(order_id)) %>% 
+  select(order_id, customer_email_lower, order_date, order_total_inc_tax, product_details) %>% 
+  separate(col = product_details,
+           into = c("product1", "product2", "product3", "product4", "product5", "product6", "product7", "product8", "product9"),
+           sep = "\\|",
+           remove = T) %>% 
+  select(-order_total_inc_tax) %>% 
+  gather(key = "product_num", value = "product", -c(order_id, customer_email_lower, order_date)) %>% 
+  filter(!is.na(product)) %>% 
+  mutate(prod_status = case_when(
+    str_detect(string = product, pattern = "1c-") ~ "membership",
+    str_detect(string = product, pattern = "ot-") ~ "one-time",
+    TRUE ~ "Other"
+  )) %>% 
+  rowwise() %>% 
+  mutate(product_price = as.double(str_remove_all(string = str_split(string = str_split(string = product, 
+                                                                                        pattern = ",")[[1]][length(str_split(string = product, 
+                                                                                                                             pattern = ",")[[1]])], 
+                                                                     pattern = ":", n = 2)[[1]][2], 
+                                                  pattern = "[:space:]"))) %>% 
+  ungroup() %>% 
+  group_by(order_id, customer_email_lower) %>% 
+  mutate(order_classification = case_when(
+    any(prod_status == "membership") ~ "membership",
+    any(prod_status == "one-time") ~ "one-time",
+    TRUE ~ "Other")) %>% #,
+  ungroup() %>% 
+  group_by(order_id, customer_email_lower, prod_status) %>% 
+  mutate(product_sub_group = max(product_price, na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(product_sub_group = if_else(condition = prod_status == order_classification,  # Move up if this works - HERE - ADD A FILL SOMEWHERE
+                                     true = product_sub_group,
+                                     false = 9999999),
+         product_sub_group = na_if(product_sub_group, 9999999)) %>% 
+  group_by(order_id, customer_email_lower) %>% 
+  fill(product_sub_group, .direction = "down") %>% 
+  fill(product_sub_group, .direction = "up") %>% 
+  ungroup() %>% 
+  select(order_id, customer_email_lower, order_classification, product_sub_group) %>% 
+  arrange(order_id, customer_email_lower, order_classification) %>% 
+  distinct(order_id, customer_email_lower, .keep_all = T) %>% 
+  filter(order_classification %in% c("membership", "one-time"))
+
+```
+
+
+```{r}
+
+write_csv(big_comm_prods_line_classified,
+          path = "Output Data\\BC Order Testing\\big_comm_prods_line_classified.csv")
+
+# write_csv(specific_example,
+#           path = "Output Data\\BC Order Testing\\customer_example.csv")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

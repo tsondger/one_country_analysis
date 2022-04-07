@@ -1,0 +1,124 @@
+---
+title: "Membership Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(warning = F,
+                      message = F,
+                      echo = F)
+
+library(ggplot2)
+library(reader)
+library(ggthemes)
+library(knitr)
+library(rmarkdown)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(stringr)
+library(shiny)
+library(shinydashboard)
+library(dashboardthemes)
+library(shinyWidgets)
+library(forcats)
+library(readr)
+library(readxl)
+library(tibble)
+library(kableExtra)
+library(gt)
+
+```
+
+## Classify Membership Cohorts
+
+Basically run everything before line 300 in chort_analysis. Then go from here. 
+
+```{r}
+
+member_cohorts <- platform_data_classified %>%
+# tt <- platform_data_classified %>%
+  
+  # FOR TESTING #
+  
+  # filter(customer_email_lower == "abeboyd77@yahoo.com") %>%
+  
+  ###############
+
+  filter(grp == "Member") %>% 
+  filter(!(str_detect(string = product_details, pattern = "ot-"))) %>% 
+  
+arrange(customer_email_lower, product_details, order_date) %>%
+  group_by(customer_email_lower, product_details) %>%
+  mutate(customer_transaction_number = row_number(),
+         customer_sub_group_transaction_number = row_number(),
+         min_transaction_date = min(order_date, na.rm = T)
+) %>% 
+  ungroup() %>%
+  mutate(cohort_grp = if_else(condition = order_date == min_transaction_date,
+                              true = grp,
+                              false = ""),
+         cohort_grp = na_if(cohort_grp, ""),
+         cohort_sub_grp = if_else(condition = order_date == min_transaction_date,
+                                  true = sub_grp,
+                                  false = ""),
+         cohort_sub_grp = na_if(cohort_sub_grp, "")) %>%
+  group_by(customer_email_lower, product_details) %>% 
+  fill(cohort_grp, .direction = "down") %>%
+  fill(cohort_sub_grp, .direction = "down") %>%
+  fill(cohort_grp, .direction = "up") %>%
+  fill(cohort_sub_grp, .direction = "up") %>%
+  ungroup() %>% 
+  mutate(cohort = if_else(condition = order_date == min_transaction_date,
+                          true = paste0(cohort_grp, " ", month(order_date, label = T), "/", year(order_date)),
+                          false = ""),
+         cohort = na_if(cohort, "")) %>%
+  group_by(customer_email_lower, product_details) %>%  
+  fill(cohort, .direction = "down") %>%
+  fill(cohort, .direction = "up") %>%
+  mutate(total_transactions = max(customer_transaction_number),
+         max_transaction_date = max(order_date, na.rm = T),
+         yr_mo_first_order = ymd(paste(year(min_transaction_date), month(min_transaction_date), "1", sep = "-"))) %>%
+  fill(max_transaction_date, .direction = "down") %>%
+  ungroup() %>%
+  mutate(membership_lost = if_else(condition = max_transaction_date == order_date,
+                                   true = "Lost",
+                                   false = "Retained")) %>% 
+  rowwise() %>%
+  mutate(months_since_first_purchase = interval(min_transaction_date, order_date) %/% months(1)) %>%
+  ungroup() %>%
+  filter(months_since_first_purchase >= 0) #%>% 
+  # filter(!(str_detect(string = product_details, pattern = "ot-")))  # Moved to the top
+
+write_csv(member_cohorts,
+          path = "Output Data\\membership_cohorts.csv")
+
+```
+
+
+```{r}
+
+# Use if not writing data at the time of transformation
+
+# write_csv(member_cohorts,
+          # path = "Output Data\\membership_cohorts.csv")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
